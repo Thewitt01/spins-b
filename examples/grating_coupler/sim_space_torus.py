@@ -204,7 +204,7 @@ def create_sim_space(
         # in the GDS file outside of the simulation extents will not be drawn.
         sim_region=optplan.Box3d(
             center=[0, 0, 0],
-            extents=[5000, 5000, 500], # this is what's messing things up
+            extents=[5000, 5000, 2000], # this is what's messing things up
         ),
         selection_matrix_type="uniform",
         # PMLs are applied on x- and z-axes. No PMLs are applied along y-axis
