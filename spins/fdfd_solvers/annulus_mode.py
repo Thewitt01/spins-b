@@ -18,47 +18,48 @@ from typing import Dict, List
 from spins.fdfd_tools import vec, unvec, dx_lists_t, vfield_t, field_t
 from spins.fdfd_tools import operators, waveguide, functional
 from . import phc_mode_solver as phc
+from spins.invdes.problem_graph.simspace import SimulationSpace
 
 from spins.gridlock import Direction
 
-#Some constants
-g = 2*np.pi*5.9e6
-c = 3e8
-eps0 = 8.854187e-12
-kb = 1.3806505e-23
-uma = 1.66053886e-27
-m = 87*uma
 
-#Desired radius of trap
-r0 = 9e-7
+def annulus_field(
+        cell_num: int,
+        cell_height: int,
+        r0 : float,
+        h: float
+):
+    """Defines our E-field
 
-#Blue potential displacement
-h = 1.5e-7
+    r0: Desired radius of trap
+    h: Blue potential displacement"""
 
-#Constants that alter the potential
-#Need to adjust
-A = 2.7e9;
-b = 8e13;
-C = 1e7;
-d = 1.5e7;
-E = 2e7;
-f = 1.3e7;
+    #Constants that alter the potential
+    #TODO Need to adjust
+    A = 2.7e9;
+    b = 8e13;
+    C = 1e7;
+    d = 1.5e7;
+    E = 2e7;
+    f = 1.3e7;
 
-cell = 40e-9
+    cell = 40e-9
 
-x, y, z = np.meshgrid(np.arange(-62.5*cell, 62*cell, cell),
-                      np.arange(-62.5*cell, 62*cell, cell), 0)
+    x, y, z = np.meshgrid(np.arange(-(cell_num/2)*cell, ((cell_num-1)/2)*cell, cell),
+                          np.arange(-(cell_num/2)*cell, ((cell_num-1)/2)*cell, cell),
+                          np.arange(-(cell_height/2)*cell, (cell_height/2)*cell, cell))
+    #added a value for the height, which should hopefully not take too long
+    theta = np.arctan(y/x)
 
-# Values of the components of the vector field
-f_x = -A/np.sqrt(2)*np.exp(-b*(np.sqrt(x**2+y**2)-r0)**2)
+    # Values of the components of the vector field
+    f_x = -A*x/abs(x)*np.cos(theta)*np.exp(-b*(np.sqrt(x**2+y**2)-r0)**2)
 
-f_y = -A/np.sqrt(2)*np.exp(-b*(np.sqrt(x**2+y**2)-r0)**2)
+    f_y = -A*y/abs(y)*np.sin(theta)*np.exp(-b*(np.sqrt(x**2+y**2)-r0)**2)
 
-f_z = z*0
+    f_z = z*0
 
-E = [f_x, f_y, f_z]
-
-
+    E = [f_x, f_y, f_z]
+    return E
 
 
 def annulus(dimx, dimy, center, big_radius, small_radius):
@@ -73,11 +74,6 @@ def annulus(dimx, dimy, center, big_radius, small_radius):
 
     return mask
 # Need to match the dimensions
-t = 125
-
-#might need to be smaller too
-mask = annulus(t, t, [0, 0], 0.2*t, 0.05*t) # can change 125 to variable
-
 
 
 #code copied and edited from waveguide_mode.py
@@ -89,10 +85,22 @@ def compute_overlap_annulus(
         mu: field_t = None,
         ) -> field_t:
     """This is hopefully going to calculate the overlap """
+
+    # need to extract the size of dxes to adjust the size of mask and the E field
+    len_dxes = np.concatenate(dxes, axis=0)
+
+    # want to extract the absolute value, x=0, y=1, z=2
+
     # Domain is all zero
     domain = np.zeros_like(E[0], dtype=int)
 
+
+
     # Then set the slices part equal to 1 - may need to use our mask
+    t = np.abs(len_dxes[0].size)
+
+    # TODO adjust these values, may call from problem
+    mask = annulus(t, t, [0, 0], 0.6 * t, 0.5 * t)
     domain[mask] = 1
     
     npts = E[0].size
@@ -116,7 +124,6 @@ def compute_overlap_annulus(
     return unvec(overlap_e, E[0].shape)
 
 
-
 def build_overlap_annulus(omega: complex, dxes: List[np.ndarray], eps: List[np.ndarray],
                   mu: List[np.ndarray] or None, axis: Direction or int,
                   mode_num: int, power: float) -> List[np.ndarray]:
@@ -124,9 +131,11 @@ def build_overlap_annulus(omega: complex, dxes: List[np.ndarray], eps: List[np.n
     if type(axis) is Direction:
         axis = axis.value
 
+    len_dxes = np.concatenate(dxes, axis=0)
+    E = annulus_field(np.abs(len_dxes[0].size), np.abs(len_dxes[2].size), r0=9e-7, h=1.5e-7)
 
     arg_overlap = {
-        'E': E, # where we insert our desired electric field
+        'E': E,  # where we insert our desired electric field
         'axis': axis,
         'omega': omega,
         'dxes': dxes,
@@ -134,11 +143,10 @@ def build_overlap_annulus(omega: complex, dxes: List[np.ndarray], eps: List[np.n
     }
     C = compute_overlap_annulus(**arg_overlap)
 
-    
     # Increase/decrease C to emit desired power.
     for k in range(len(C)):
         C[k] *= np.sqrt(power)
-
-
+    # Might want to return absolute value to remove phase - list or array
+    [abs(x) for x in C]
     return C
 
