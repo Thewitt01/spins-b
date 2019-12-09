@@ -24,45 +24,6 @@ from spins.invdes.problem_graph.simspace import SimulationSpace
 from spins.gridlock import Direction
 
 
-def annulus_field(
-        cell_num: int,
-        cell_height: int,
-        r0 : float,
-        h: float
-):
-    """Defines our E-field
-
-    r0: Desired radius of trap
-    h: Blue potential displacement"""
-
-    #Constants that alter the potential
-    #TODO Need to adjust
-    A = 2.7e9;
-    b = 8e13;
-    C = 1e7;
-    d = 1.5e7;
-    E = 2e7;
-    f = 1.3e7;
-
-    cell = 40e-9
-
-    x, y, z = np.meshgrid(np.arange(-(cell_num/2)*cell, ((cell_num-1)/2)*cell, cell),
-                          np.arange(-(cell_num/2)*cell, ((cell_num-1)/2)*cell, cell),
-                          0) # np.arange(-(cell_height/2)*cell, ((cell_height-1)/2)*cell, cell) for 3d
-    #added a value for the height, which should hopefully not take too long
-    theta = np.arctan(y/x)
-
-    # Values of the components of the vector field
-    f_x = A*np.sin(theta)*np.exp(-b*(np.sqrt(x**2+y**2)-r0)**2) # check division by zero
-    # reverse the sin/cos to make it angular rather than radial?
-    f_y = -A*np.cos(theta)*np.exp(-b*(np.sqrt(x**2+y**2)-r0)**2)
-
-    f_z = z*0
-
-    E = [f_x, f_y, f_z]
-    return E
-
-
 def annulus(dimx, dimy, center, big_radius, small_radius):
     """This produces a mask of true in an annulus shape depending on the
     entered parameters"""
@@ -75,6 +36,40 @@ def annulus(dimx, dimy, center, big_radius, small_radius):
 
     return mask
 # Need to match the dimensions
+
+
+
+def annulus_field(
+        cell_num: int,
+        potential: float
+
+):
+    """Defines our E-field
+
+    r0: Desired radius of trap
+    h: Blue potential displacement"""
+
+    x, y, z = np.meshgrid(np.arange(-(cell_num / 2), ((cell_num - 1) / 2), 1),
+                          np.arange(-(cell_num / 2), ((cell_num - 1) / 2), 1),
+                          0)
+    # Values of the components of the vector field
+    f_x = x * 0
+
+    f_y = y * 0
+
+    f_z = z * 0
+
+    t = cell_num
+    mask = annulus(t, t, [0, 0], 0.2 * t, 0.1 * t)
+    mask = mask[..., newaxis]
+
+    f_x[mask] = potential
+    f_y[mask] = potential
+
+    E = [f_x, f_y, f_z]
+    return E
+
+
 
 
 #code copied and edited from waveguide_mode.py
@@ -93,14 +88,13 @@ def compute_overlap_annulus(
     # want to extract the absolute value, x=0, y=1, z=2
 
     # Domain is all zero
+    t = np.abs(len_dxes[0].size)
+    mask = annulus(t, t, [0, 0], 0.2 * t, 0.1 * t)
+    mask = mask[..., newaxis] # adds the z to mask
     domain = np.zeros_like(E[0], dtype=int)
 
-    # Then set the slices part equal to 1 - may need to use our mask
-    t = np.abs(len_dxes[0].size)
-
     # TODO adjust these values, may call from problem
-    mask = annulus(t, t, [0, 0], 0.3 * t, 0.2 * t)
-    mask = mask[..., newaxis] # adds the z to mask
+
     domain[mask] = 1
     
     npts = E[0].size
@@ -132,8 +126,8 @@ def build_overlap_annulus(omega: complex, dxes: List[np.ndarray], eps: List[np.n
         axis = axis.value
 
     len_dxes = np.concatenate(dxes, axis=0)
-    E = annulus_field(np.abs(len_dxes[0].size), np.abs(len_dxes[2].size), r0=1.25e-6, h=1.5e-7)
-    # could be the radius is messing things up?
+    E = annulus_field(np.abs(len_dxes[0].size), 3e9)
+
     arg_overlap = {
         'E': E,  # where we insert our desired electric field
         'axis': axis,
