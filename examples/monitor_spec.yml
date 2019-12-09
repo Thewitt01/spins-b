@@ -1,0 +1,16 @@
+monitor_list:
+- monitor_names: [field1070]
+  monitor_type: planar
+  vector_operation: magnitude
+
+- monitor_names: [epsilon]
+  monitor_type: planar
+  scalar_operation: magnitude
+  vector_operation: z
+
+- monitor_names: [power1070]
+  monitor_type: scalar
+  scalar_operation: magnitude
+
+- monitor_names: [objective]
+  monitor_type: scalar
