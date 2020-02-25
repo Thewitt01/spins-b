@@ -285,32 +285,32 @@ def create_objective(
     )
 
     upper = optplan.WaveguideModeOverlap(
-        center=[0, 1000, 0],
-        extents=[GRID_SPACING, 500, 600],
+        center=[0, 1250, 0],
+        extents=[GRID_SPACING, 400, 600],
         normal=[1, 0, 0],
         mode_num=0,
         power=1.0,
     )
 
     lower = optplan.WaveguideModeOverlap(
-        center=[0, -1000, 0],
-        extents=[GRID_SPACING, 500, 600],
+        center=[0, -1250, 0],
+        extents=[GRID_SPACING, 400, 600],
         normal=[1, 0, 0],
         mode_num=0,
         power=1.0,
     )
 
     right = optplan.WaveguideModeOverlap(
-        center=[1250, 0, 0],
-        extents=[GRID_SPACING, 800, 600],
+        center=[1500, 0, 0],
+        extents=[GRID_SPACING, 400, 600],
         normal=[1, 0, 0],
         mode_num=0,
         power=1.0,
     )
 
     left = optplan.WaveguideModeOverlap(
-        center=[-1250, 0, 0],
-        extents=[GRID_SPACING, 800, 600],
+        center=[-1500, 0, 0],
+        extents=[GRID_SPACING, 400, 600],
         normal=[1, 0, 0],
         mode_num=0,
         power=1.0,
@@ -321,7 +321,7 @@ def create_objective(
     power_objs = []
     # Monitor the metrics and fields
     monitor_list = []
-    for wlen, overlap, label in zip([1070, 1070, 1070, 1070, 1070], [upper, lower, wg_out, right, left], [2, 3, 5, 4, 1]):
+    for wlen, overlap, label in zip([780, 780, 780, 780, 780], [upper, lower, wg_out, right, left], [2, 3, 5, 4, 1]):
         epsilon = optplan.Epsilon(
             simulation_space=sim_space,
             wavelength=wlen,
@@ -568,4 +568,3 @@ if __name__ == "__main__":
         resume_opt(args.save_folder)
     elif args.action == "gen_gds":
         gen_gds(args.save_folder, sim_width=sim_width)
-

@@ -19,8 +19,8 @@ import os
 import pickle
 import shutil
 
-import gdspy
 import numpy as np
+import gdspy
 from typing import List, NamedTuple, Tuple
 
 # `spins.invdes.problem_graph` contains the high-level spins code.
@@ -108,57 +108,6 @@ def create_sim_space(
     Returns:
         A `SimulationSpace` description.
     """
-    # Calculate the simulation size, including  PMLs
-    # TODO change the first part of ech dimension to be equal
-    sim_size = [
-        sim_width + 2 * buffer_len + dx * num_pmls,
-        sim_width + 2 * buffer_len + dx * num_pmls
-    ]
-    # First, we use `gdspy` to draw the waveguides and shapes that we would
-    # like to use. Instead of programmatically generating a GDS file using
-    # `gdspy`, we could also simply provide a GDS file (e.g. drawn using
-    # KLayout).
-
-    # Declare some constants to represent the different layers.
-    # Not sure if we need layers
-    LAYER = 100
-
-
-    # Create rectangles corresponding to the waveguide, the BOX layer, and the
-    # design region. We extend the rectangles outside the simulation region
-    # by multiplying locations by a factor of 1.1.
-
-    # We distinguish between the top part of the waveguide (which is etched)
-    # and the bottom part of the waveguide (which is not etched).
-
-    # TODO define our single waveguide and surface, I don't believe it will be etched.
-    # Switch x and y temporarily to try and get better direction for field - change top to bottom
-    # Add an exit
-    waveguide_top = gdspy.Rectangle((-1.1 * sim_size[0] / 2, -box_width/ 2), # edits to the width
-                                (-box_width / 2, box_width / 2),
-                                LAYER)
-
-    waveguide_bottom = gdspy.Rectangle((box_width / 2, -box_width/ 2),
-                                (1.1 * sim_size[0] / 2, box_width / 2),
-                                LAYER)
-
-    design_region = gdspy.Rectangle((-box_width / 2, -box_width / 2),
-                                    (box_width / 2, box_width / 2), # extend region?
-                                    LAYER)
-
-    # Generate the foreground and background GDS files.
-    gds_fg = gdspy.Cell("FOREGROUND", exclude_from_current=True)
-    gds_fg.add(waveguide_top)
-    gds_fg.add(waveguide_bottom)
-    gds_fg.add(design_region)
-
-    # I guess we keep this the same and not include the design_region
-    gds_bg = gdspy.Cell("BACKGROUND", exclude_from_current=True)
-    gds_bg.add(waveguide_top)
-    gds_bg.add(waveguide_bottom)
-
-    gdspy.write_gds(gds_fg_name, [gds_fg], unit=1e-9, precision=1e-9)
-    gdspy.write_gds(gds_bg_name, [gds_bg], unit=1e-9, precision=1e-9)
 
     # The BOX layer/silicon device interface is set at `z = 0`.
     #
@@ -285,7 +234,7 @@ def create_objective(
     )
 
     upper = optplan.WaveguideModeOverlap(
-        center=[0, 1000, 0],
+        center=[0, 1250, 0],
         extents=[GRID_SPACING, 500, 600],
         normal=[1, 0, 0],
         mode_num=0,
@@ -293,7 +242,7 @@ def create_objective(
     )
 
     lower = optplan.WaveguideModeOverlap(
-        center=[0, -1000, 0],
+        center=[0, -1250, 0],
         extents=[GRID_SPACING, 500, 600],
         normal=[1, 0, 0],
         mode_num=0,
@@ -301,16 +250,16 @@ def create_objective(
     )
 
     right = optplan.WaveguideModeOverlap(
-        center=[1250, 0, 0],
-        extents=[GRID_SPACING, 800, 600],
+        center=[2000, 0, 0],
+        extents=[GRID_SPACING, 500, 600],
         normal=[1, 0, 0],
         mode_num=0,
         power=1.0,
     )
 
     left = optplan.WaveguideModeOverlap(
-        center=[-1250, 0, 0],
-        extents=[GRID_SPACING, 800, 600],
+        center=[-2000, 0, 0],
+        extents=[GRID_SPACING, 500, 600],
         normal=[1, 0, 0],
         mode_num=0,
         power=1.0,
@@ -568,4 +517,3 @@ if __name__ == "__main__":
         resume_opt(args.save_folder)
     elif args.action == "gen_gds":
         gen_gds(args.save_folder, sim_width=sim_width)
-

@@ -214,7 +214,7 @@ def create_sim_space(
         # in the GDS file outside of the simulation extents will not be drawn.
         sim_region=optplan.Box3d(
             center=[0, 0, 0],
-            extents=[8000, 8000, 40], # this is what's messing things up, needs to be 2D
+            extents=[8000, 8000, 800], # this is what's messing things up, needs to be 2D
         ), # changing the size too much creates an error
         selection_matrix_type="direct_lattice", # or uniform
         # PMLs are applied on x- and z-axes. No PMLs are applied along y-axis
@@ -269,49 +269,17 @@ def create_objective(
 
     # Create the waveguide source - align with our sim_space
     wg_source = optplan.WaveguideModeSource(
-        center=[-3750, 0, 0],  # may need to edit these, not too sure
-        extents=[GRID_SPACING, 5000, 600],  # these too # waveguide overlap should be larger
-        normal=[1, 0, 0],
+        center=[0, 0, -375],  # may need to edit these, not too sure
+        extents=[6000, 6000, GRID_SPACING],  # these too # waveguide overlap should be larger
+        normal=[0, 0, 1],
         mode_num=0,
         power=1.0,
     )
 
     wg_out = optplan.WaveguideModeOverlap(
-        center=[3750, 0, 0],
-        extents=[GRID_SPACING, 5000, 600], #edits to the width
-        normal=[1, 0, 0],
-        mode_num=0,
-        power=1.0,
-    )
-
-    upper = optplan.WaveguideModeOverlap(
-        center=[0, 1000, 0],
-        extents=[GRID_SPACING, 500, 600],
-        normal=[1, 0, 0],
-        mode_num=0,
-        power=1.0,
-    )
-
-    lower = optplan.WaveguideModeOverlap(
-        center=[0, -1000, 0],
-        extents=[GRID_SPACING, 500, 600],
-        normal=[1, 0, 0],
-        mode_num=0,
-        power=1.0,
-    )
-
-    right = optplan.WaveguideModeOverlap(
-        center=[1250, 0, 0],
-        extents=[GRID_SPACING, 800, 600],
-        normal=[1, 0, 0],
-        mode_num=0,
-        power=1.0,
-    )
-
-    left = optplan.WaveguideModeOverlap(
-        center=[-1250, 0, 0],
-        extents=[GRID_SPACING, 800, 600],
-        normal=[1, 0, 0],
+        center=[0, 0, 150],
+        extents=[2000, 2000, GRID_SPACING], #edits to the width
+        normal=[0, 0, 1],
         mode_num=0,
         power=1.0,
     )
@@ -321,7 +289,7 @@ def create_objective(
     power_objs = []
     # Monitor the metrics and fields
     monitor_list = []
-    for wlen, overlap, label in zip([1070, 1070, 1070, 1070, 1070], [upper, lower, wg_out, right, left], [2, 3, 5, 4, 1]):
+    for wlen, overlap, label in zip([1070], [wg_out], [1]):
         epsilon = optplan.Epsilon(
             simulation_space=sim_space,
             wavelength=wlen,
@@ -568,4 +536,3 @@ if __name__ == "__main__":
         resume_opt(args.save_folder)
     elif args.action == "gen_gds":
         gen_gds(args.save_folder, sim_width=sim_width)
-

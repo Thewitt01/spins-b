@@ -19,8 +19,8 @@ import os
 import pickle
 import shutil
 
-import gdspy
 import numpy as np
+import gdspy
 from typing import List, NamedTuple, Tuple
 
 # `spins.invdes.problem_graph` contains the high-level spins code.
@@ -146,16 +146,29 @@ def create_sim_space(
                                     (box_width / 2, box_width / 2), # extend region?
                                     LAYER)
 
+    annulus = gdspy.Round(
+        (0, 0),
+        2000,
+        inner_radius=1000,
+        initial_angle=0,
+        final_angle=2 * np.pi,
+        layer=LAYER
+        )
+
+    #inv = gdspy.fast_boolean(design_region, annulus, "not", layer=LAYER)
+
     # Generate the foreground and background GDS files.
     gds_fg = gdspy.Cell("FOREGROUND", exclude_from_current=True)
     gds_fg.add(waveguide_top)
     gds_fg.add(waveguide_bottom)
+    #gds_fg.add(inv)
     gds_fg.add(design_region)
 
     # I guess we keep this the same and not include the design_region
     gds_bg = gdspy.Cell("BACKGROUND", exclude_from_current=True)
     gds_bg.add(waveguide_top)
     gds_bg.add(waveguide_bottom)
+    gds_bg.add(annulus) # annulus is subtracted
 
     gdspy.write_gds(gds_fg_name, [gds_fg], unit=1e-9, precision=1e-9)
     gdspy.write_gds(gds_bg_name, [gds_bg], unit=1e-9, precision=1e-9)
@@ -285,7 +298,7 @@ def create_objective(
     )
 
     upper = optplan.WaveguideModeOverlap(
-        center=[0, 1000, 0],
+        center=[0, 1500, 0],
         extents=[GRID_SPACING, 500, 600],
         normal=[1, 0, 0],
         mode_num=0,
@@ -293,7 +306,7 @@ def create_objective(
     )
 
     lower = optplan.WaveguideModeOverlap(
-        center=[0, -1000, 0],
+        center=[0, -1500, 0],
         extents=[GRID_SPACING, 500, 600],
         normal=[1, 0, 0],
         mode_num=0,
@@ -301,16 +314,16 @@ def create_objective(
     )
 
     right = optplan.WaveguideModeOverlap(
-        center=[1250, 0, 0],
-        extents=[GRID_SPACING, 800, 600],
+        center=[2500, 0, 0],
+        extents=[GRID_SPACING, 500, 600],
         normal=[1, 0, 0],
         mode_num=0,
         power=1.0,
     )
 
     left = optplan.WaveguideModeOverlap(
-        center=[-1250, 0, 0],
-        extents=[GRID_SPACING, 800, 600],
+        center=[-2500, 0, 0],
+        extents=[GRID_SPACING, 500, 600],
         normal=[1, 0, 0],
         mode_num=0,
         power=1.0,
@@ -568,4 +581,3 @@ if __name__ == "__main__":
         resume_opt(args.save_folder)
     elif args.action == "gen_gds":
         gen_gds(args.save_folder, sim_width=sim_width)
-

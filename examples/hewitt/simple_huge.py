@@ -79,10 +79,10 @@ def run_opt(save_folder: str, sim_width: float) -> None:
 def create_sim_space(
         gds_fg_name: str,
         gds_bg_name: str,
-        sim_width: float = 10000,  # size of sim_space
-        box_width: float = 6000,  # size of our editing structure
+        sim_width: float = 1000000,  # size of sim_space
+        box_width: float = 600000,  # size of our editing structure
         wg_width: float = 600,
-        buffer_len: float = 1500,  # not sure we'll need
+        buffer_len: float = 150000,  # not sure we'll need
         dx: int = 40,
         num_pmls: int = 10,
         visualize: bool = False,
@@ -214,7 +214,7 @@ def create_sim_space(
         # in the GDS file outside of the simulation extents will not be drawn.
         sim_region=optplan.Box3d(
             center=[0, 0, 0],
-            extents=[8000, 8000, 40], # this is what's messing things up, needs to be 2D
+            extents=[800000, 800000, 40], # this is what's messing things up, needs to be 2D
         ), # changing the size too much creates an error
         selection_matrix_type="direct_lattice", # or uniform
         # PMLs are applied on x- and z-axes. No PMLs are applied along y-axis
@@ -269,48 +269,48 @@ def create_objective(
 
     # Create the waveguide source - align with our sim_space
     wg_source = optplan.WaveguideModeSource(
-        center=[-3750, 0, 0],  # may need to edit these, not too sure
-        extents=[GRID_SPACING, 5000, 600],  # these too # waveguide overlap should be larger
+        center=[-375000, 0, 0],  # may need to edit these, not too sure
+        extents=[GRID_SPACING, 500000, 600],  # these too # waveguide overlap should be larger
         normal=[1, 0, 0],
         mode_num=0,
         power=1.0,
     )
 
     wg_out = optplan.WaveguideModeOverlap(
-        center=[3750, 0, 0],
-        extents=[GRID_SPACING, 5000, 600], #edits to the width
+        center=[375000, 0, 0],
+        extents=[GRID_SPACING, 500000, 600], #edits to the width
         normal=[1, 0, 0],
         mode_num=0,
         power=1.0,
     )
 
     upper = optplan.WaveguideModeOverlap(
-        center=[0, 1000, 0],
-        extents=[GRID_SPACING, 500, 600],
+        center=[0, 100000, 0],
+        extents=[GRID_SPACING, 50000, 600],
         normal=[1, 0, 0],
         mode_num=0,
         power=1.0,
     )
 
     lower = optplan.WaveguideModeOverlap(
-        center=[0, -1000, 0],
-        extents=[GRID_SPACING, 500, 600],
+        center=[0, -100000, 0],
+        extents=[GRID_SPACING, 50000, 600],
         normal=[1, 0, 0],
         mode_num=0,
         power=1.0,
     )
 
     right = optplan.WaveguideModeOverlap(
-        center=[1250, 0, 0],
-        extents=[GRID_SPACING, 800, 600],
+        center=[125000, 0, 0],
+        extents=[GRID_SPACING, 60000, 600],
         normal=[1, 0, 0],
         mode_num=0,
         power=1.0,
     )
 
     left = optplan.WaveguideModeOverlap(
-        center=[-1250, 0, 0],
-        extents=[GRID_SPACING, 800, 600],
+        center=[-125000, 0, 0],
+        extents=[GRID_SPACING, 60000, 600],
         normal=[1, 0, 0],
         mode_num=0,
         power=1.0,
@@ -321,7 +321,7 @@ def create_objective(
     power_objs = []
     # Monitor the metrics and fields
     monitor_list = []
-    for wlen, overlap, label in zip([1070, 1070, 1070, 1070, 1070], [upper, lower, wg_out, right, left], [2, 3, 5, 4, 1]):
+    for wlen, overlap, label in zip([780, 780, 780, 780, 780], [upper, lower, wg_out, right, left], [2, 3, 5, 4, 1]):
         epsilon = optplan.Epsilon(
             simulation_space=sim_space,
             wavelength=wlen,
@@ -331,7 +331,7 @@ def create_objective(
             source=wg_source,
             # Use a direct matrix solver (e.g. LU-factorization) on CPU for
             # 2D simulations and the GPU Maxwell solver for 3D.
-            solver="local_direct",
+            solver="maxwell_cg", #not local direct
             wavelength=wlen,
             simulation_space=sim_space,
             epsilon=epsilon,
@@ -554,7 +554,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "save_folder", help="Folder containing optimization logs.")
 
-    sim_width = 10000
+    sim_width = 1000000
 
 
     args = parser.parse_args()
@@ -568,4 +568,3 @@ if __name__ == "__main__":
         resume_opt(args.save_folder)
     elif args.action == "gen_gds":
         gen_gds(args.save_folder, sim_width=sim_width)
-

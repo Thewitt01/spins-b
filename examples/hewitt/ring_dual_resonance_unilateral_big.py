@@ -27,15 +27,19 @@ from typing import List, NamedTuple, Tuple
 from spins.invdes import problem_graph
 # Import module for handling processing optimization logs.
 from spins.invdes.problem_graph import log_tools
+from spins.invdes.problem_graph import grid_utils
 # `spins.invdes.problem_graph.optplan` contains the optimization plan schema.
 from spins.invdes.problem_graph import optplan
 from spins.invdes.problem_graph import workspace
+from spins.invdes.problem_graph.functions import stored_energy
+from spins.invdes.problem_graph.functions import poynting
 
-# If `True`, also minimize the back-reflection.
-MINIMIZE_BACKREFLECTION = False
-
-
-# edit grating.py simulation space
+# Parameters for optimisation
+GRID_SPACING = 40  # Yee cell grid spacing
+dx = 40
+wg_width = 500
+wlen_sim_list = [1070, 568]  # List of wavelengths to simulate at
+wlen_opt_list = [1070]  # List of wavelengths to optimise at
 
 
 def run_opt(save_folder: str, sim_width: float) -> None:
@@ -56,7 +60,7 @@ def run_opt(save_folder: str, sim_width: float) -> None:
     obj, monitors = create_objective(
         sim_space, sim_width=sim_width)  # or a grating length
     trans_list = create_transformations(
-        obj, monitors, sim_space, cont_iters=100, min_feature=100)
+        obj, monitors, sim_space, cont_iters=150, min_feature=100)
     plan = optplan.OptimizationPlan(transformations=trans_list)
 
     # Save the optimization plan so we have an exact record of all the
@@ -79,11 +83,11 @@ def run_opt(save_folder: str, sim_width: float) -> None:
 def create_sim_space(
         gds_fg_name: str,
         gds_bg_name: str,
-        sim_width: float = 10000,  # size of sim_space
-        box_width: float = 6000,  # size of our editing structure
-        wg_width: float = 600,
+        sim_width: float = 8000,  # size of sim_space
+        box_width: float = 4000,  # size of our editing structure
+        wg_width: float = 500,
         buffer_len: float = 1500,  # not sure we'll need
-        dx: int = 40,
+        dx: int = 40, # may change back to 40
         num_pmls: int = 10,
         visualize: bool = False,
 ) -> optplan.SimulationSpace:
@@ -108,57 +112,6 @@ def create_sim_space(
     Returns:
         A `SimulationSpace` description.
     """
-    # Calculate the simulation size, including  PMLs
-    # TODO change the first part of ech dimension to be equal
-    sim_size = [
-        sim_width + 2 * buffer_len + dx * num_pmls,
-        sim_width + 2 * buffer_len + dx * num_pmls
-    ]
-    # First, we use `gdspy` to draw the waveguides and shapes that we would
-    # like to use. Instead of programmatically generating a GDS file using
-    # `gdspy`, we could also simply provide a GDS file (e.g. drawn using
-    # KLayout).
-
-    # Declare some constants to represent the different layers.
-    # Not sure if we need layers
-    LAYER = 100
-
-
-    # Create rectangles corresponding to the waveguide, the BOX layer, and the
-    # design region. We extend the rectangles outside the simulation region
-    # by multiplying locations by a factor of 1.1.
-
-    # We distinguish between the top part of the waveguide (which is etched)
-    # and the bottom part of the waveguide (which is not etched).
-
-    # TODO define our single waveguide and surface, I don't believe it will be etched.
-    # Switch x and y temporarily to try and get better direction for field - change top to bottom
-    # Add an exit
-    waveguide_top = gdspy.Rectangle((-1.1 * sim_size[0] / 2, -box_width/ 2), # edits to the width
-                                (-box_width / 2, box_width / 2),
-                                LAYER)
-
-    waveguide_bottom = gdspy.Rectangle((box_width / 2, -box_width/ 2),
-                                (1.1 * sim_size[0] / 2, box_width / 2),
-                                LAYER)
-
-    design_region = gdspy.Rectangle((-box_width / 2, -box_width / 2),
-                                    (box_width / 2, box_width / 2), # extend region?
-                                    LAYER)
-
-    # Generate the foreground and background GDS files.
-    gds_fg = gdspy.Cell("FOREGROUND", exclude_from_current=True)
-    gds_fg.add(waveguide_top)
-    gds_fg.add(waveguide_bottom)
-    gds_fg.add(design_region)
-
-    # I guess we keep this the same and not include the design_region
-    gds_bg = gdspy.Cell("BACKGROUND", exclude_from_current=True)
-    gds_bg.add(waveguide_top)
-    gds_bg.add(waveguide_bottom)
-
-    gdspy.write_gds(gds_fg_name, [gds_fg], unit=1e-9, precision=1e-9)
-    gdspy.write_gds(gds_bg_name, [gds_bg], unit=1e-9, precision=1e-9)
 
     # The BOX layer/silicon device interface is set at `z = 0`.
     #
@@ -175,7 +128,9 @@ def create_sim_space(
     # Remove the etching stuff
     # Can define Si3N4 - the material we want to use
     # Fix: try to make multiple layers, but all the same?
-    air = optplan.Material(index=optplan.ComplexNumber(real=1))
+
+    #air = optplan.Material(index=optplan.ComplexNumber(real=1))
+    air = optplan.Material(mat_name="air")
     stack = [
         optplan.GdsMaterialStackLayer(
             foreground=air,
@@ -214,13 +169,13 @@ def create_sim_space(
         # in the GDS file outside of the simulation extents will not be drawn.
         sim_region=optplan.Box3d(
             center=[0, 0, 0],
-            extents=[8000, 8000, 40], # this is what's messing things up, needs to be 2D
+            extents=[6000, 6000, 40], # this is what's messing things up, needs to be 2D
         ), # changing the size too much creates an error
         selection_matrix_type="direct_lattice", # or uniform
         # PMLs are applied on x- and z-axes. No PMLs are applied along y-axis
         # because it is the axis of translational symmetry.
         pml_thickness=[num_pmls, num_pmls, num_pmls, num_pmls, 0, 0], # may need to edit this, make z the 0 axis
-    )
+        )
 
     if visualize:
         # To visualize permittivity distribution, we actually have to
@@ -229,7 +184,7 @@ def create_sim_space(
         from spins.invdes.problem_graph.simspace import get_fg_and_bg
 
         context = workspace.Workspace()
-        eps_fg, eps_bg = get_fg_and_bg(context.get_object(simspace), label=1) #edit here
+        eps_fg, eps_bg = get_fg_and_bg(context.get_object(simspace), label=1)  # edit here
 
         def plot(x):
             plt.imshow(np.abs(x)[:, 0, :].T.squeeze(), origin="lower")
@@ -250,85 +205,67 @@ def create_sim_space(
     return simspace
 
 
-# put the objective function here
-# Yee cell grid spacing
-GRID_SPACING = 40
-# define these in a more appropriate place
-dx = 40
-wg_width = 600
-
-
 def create_objective(
         sim_space: optplan.SimulationSpace,
         sim_width: float
-
 ) -> Tuple[optplan.Function, List[optplan.Monitor]]:
-    """"Creates the objective function.
-    It will hopefully use the annulur overlap to optimise over
-    our desired region"""
+    """"Creates the objective function."""
 
     # Create the waveguide source - align with our sim_space
-    wg_source = optplan.WaveguideModeSource(
-        center=[-3750, 0, 0],  # may need to edit these, not too sure
-        extents=[GRID_SPACING, 5000, 600],  # these too # waveguide overlap should be larger
+    port1_in = optplan.WaveguideModeSource(
+        center=[-2750, -2250, 0],  # may need to edit these, not too sure
+        extents=[GRID_SPACING, 1500, 600],  # these too # waveguide overlap should be larger
         normal=[1, 0, 0],
         mode_num=0,
         power=1.0,
     )
 
-    wg_out = optplan.WaveguideModeOverlap(
-        center=[3750, 0, 0],
-        extents=[GRID_SPACING, 5000, 600], #edits to the width
+    port1_out = optplan.WaveguideModeOverlap(
+        center=[-2750, -2250, 0],  # may need to edit these, not too sure
+        extents=[GRID_SPACING, 1500, 600],  # these too # waveguide overlap should be larger
+        normal=[-1, 0, 0],
+        mode_num=0,
+        power=1.0,
+    )
+
+    port2_out = optplan.WaveguideModeOverlap(
+        center=[2750, -2250, 0],
+        extents=[GRID_SPACING, 1500, 600], #edits to the width
         normal=[1, 0, 0],
         mode_num=0,
         power=1.0,
     )
 
-    upper = optplan.WaveguideModeOverlap(
-        center=[0, 1000, 0],
-        extents=[GRID_SPACING, 500, 600],
+    port3_pos = optplan.WaveguideModeOverlap(
+        center=[0, 1750, 0],
+        extents=[GRID_SPACING, 750, 600],  # edits to the width
         normal=[1, 0, 0],
         mode_num=0,
         power=1.0,
     )
 
-    lower = optplan.WaveguideModeOverlap(
-        center=[0, -1000, 0],
-        extents=[GRID_SPACING, 500, 600],
-        normal=[1, 0, 0],
+    port3_neg = optplan.WaveguideModeOverlap(
+        center=[0, 1750, 0],
+        extents=[GRID_SPACING, 750, 600],  # edits to the width
+        normal=[-1, 0, 0],
         mode_num=0,
         power=1.0,
     )
 
-    right = optplan.WaveguideModeOverlap(
-        center=[1250, 0, 0],
-        extents=[GRID_SPACING, 800, 600],
-        normal=[1, 0, 0],
-        mode_num=0,
-        power=1.0,
-    )
-
-    left = optplan.WaveguideModeOverlap(
-        center=[-1250, 0, 0],
-        extents=[GRID_SPACING, 800, 600],
-        normal=[1, 0, 0],
-        mode_num=0,
-        power=1.0,
-    )
-
-    # May want to define a way out, not sure
-
+    # Construct the monitors for the metrics and fields
     power_objs = []
-    # Monitor the metrics and fields
     monitor_list = []
-    for wlen, overlap, label in zip([1070, 1070, 1070, 1070, 1070], [upper, lower, wg_out, right, left], [2, 3, 5, 4, 1]):
+    first = True
+    obj = 0
+    for wlen in wlen_sim_list:
+
         epsilon = optplan.Epsilon(
             simulation_space=sim_space,
             wavelength=wlen,
         )
 
         sim = optplan.FdfdSimulation(
-            source=wg_source,
+            source=port1_in,
             # Use a direct matrix solver (e.g. LU-factorization) on CPU for
             # 2D simulations and the GPU Maxwell solver for 3D.
             solver="local_direct",
@@ -336,32 +273,71 @@ def create_objective(
             simulation_space=sim_space,
             epsilon=epsilon,
         )
+
         # Take a field slice through the z=0 plane to save each iteration.
         monitor_list.append(
             optplan.FieldMonitor(
-                name="field{}".format(label), # edit so we can have multiple of same wavelength
+                name="field_{}".format(wlen), # edit so we can have multiple of same wavelength
                 function=sim,
                 normal=[0, 0, 1],  # may want to change these normals
                 center=[0, 0, 0],
             ))
-        if label == 1: # edit here
-            monitor_list.append(
-                optplan.FieldMonitor(
-                    name="epsilon",
-                    function=epsilon))
 
-        overlap = optplan.Overlap(simulation=sim, overlap=overlap)
+        if first:
+            monitor_list.append(optplan.FieldMonitor(name="epsilon", function=epsilon))
+            first = False
 
-        power = optplan.abs(overlap) ** 2
-        power_objs.append(power)
-        monitor_list.append(
-            optplan.SimpleMonitor(name="power{}".format(label), function=power)) # edit here
+        port1_out_overlap = optplan.Overlap(simulation=sim, overlap=port1_out)
+        port2_out_overlap = optplan.Overlap(simulation=sim, overlap=port2_out)
 
-    # Spins minimizes the objective function, so to make `power` maximized,
-    # we minimize `1 - power`.
-    obj = 0
-    for power in power_objs:
-        obj += (1 - power) ** 2
+        port3_pos_overlap = optplan.Overlap(simulation=sim, overlap=port3_pos)
+        port3_neg_overlap = optplan.Overlap(simulation=sim, overlap=port3_neg)
+
+        port1_out_power = optplan.abs(port1_out_overlap)**2
+        port2_out_power = optplan.abs(port2_out_overlap)**2
+
+        port3_pos_power = optplan.abs(port3_pos_overlap) ** 2
+        port3_neg_power = optplan.abs(port3_neg_overlap) ** 2
+
+        power_objs.append(port1_out_power)
+        power_objs.append(port2_out_power)
+        power_objs.append(port3_pos_power)
+        power_objs.append(port3_neg_power)
+
+        monitor_list.append(optplan.SimpleMonitor(name="port1_out_power_{}".format(wlen), function=port1_out_power))
+        monitor_list.append(optplan.SimpleMonitor(name="port2_out_power_{}".format(wlen), function=port2_out_power))
+        monitor_list.append(optplan.SimpleMonitor(name="port3_pos_power_{}".format(wlen), function=port3_pos_power))
+        monitor_list.append(optplan.SimpleMonitor(name="port3_neg_power_{}".format(wlen), function=port3_neg_power))
+
+
+        if wlen in wlen_opt_list:  # Only optimise for the resonant wavelengths of the ring resonator
+            resonator_energy = stored_energy.StoredEnergy(simulation=sim, simulation_space=sim_space, center=[0, 1000, 0],
+                                                          extents=[2000, 2000, 1000], epsilon=epsilon)
+
+            monitor_list.append(optplan.SimpleMonitor(name="stored_energy_{}".format(wlen), function=resonator_energy))
+
+            power_rad_top = poynting.PowerTransmission(field=sim, center=[0, 2500, 0], extents=[2000, 0, 0], normal=[0, 1, 0])
+            power_rad_left = poynting.PowerTransmission(field=sim, center=[-2500, 1000, 0], extents=[0, 2000, 0], normal=[-1, 0, 0])
+            power_rad_right = poynting.PowerTransmission(field=sim, center=[2500, 1000, 0], extents=[0, 2000, 0], normal=[1, 0, 0])
+
+            monitor_list.append(optplan.SimpleMonitor(name="Pr_top_{}".format(wlen), function=power_rad_top))
+            monitor_list.append(optplan.SimpleMonitor(name="Pr_left_{}".format(wlen), function=power_rad_left))
+            monitor_list.append(optplan.SimpleMonitor(name="Pr_right_{}".format(wlen), function=power_rad_right))
+
+            #obj += port3_neg_power/port3_pos_power # + (2-resonator_energy)**2
+            obj += (1-port3_pos_power)**2 + (port3_neg_power)**2
+
+            # Objective function to achieve a particular stored energy
+            # Specifying a specific target stored energy for both wavelengths seems to perform better for achieving
+            # coupling for multiple resonances
+            #obj += (5-resonator_energy)**2
+
+            # Objective to maximise Q of resonator
+            #obj += resonator_energy / (power_rad_top + power_rad_left + power_rad_right)
+
+            # Objective to minimise output powers for critical coupling (all power lost in resonator)
+            # Update: Did not get good results with this objective fn
+            #obj += port1_out_power + port2_out_power
 
     monitor_list.append(optplan.SimpleMonitor(name="objective", function=obj))
 
@@ -373,7 +349,7 @@ def create_transformations(
         monitors: List[optplan.Monitor],
         sim_space: optplan.SimulationSpaceBase,
         cont_iters: int, # require more to optimise power better
-        num_stages: int = 3,
+        num_stages: int = 5,
         min_feature: float = 100,
 ) -> List[optplan.Transformation]:
     """Creates a list of transformations for the device optimization.
@@ -456,7 +432,7 @@ def view_opt(save_folder: str) -> None:
     log_df = log_tools.create_log_data_frame(
         log_tools.load_all_logs(save_folder))
     monitor_descriptions = log_tools.load_from_yml(
-        os.path.join(os.path.dirname(__file__), "monitor_spec_wide.yml"))
+        os.path.join(os.path.dirname(__file__), "monitor_spec_dual.yml"))
     log_tools.plot_monitor_data(log_df, monitor_descriptions)
 
 
@@ -554,7 +530,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "save_folder", help="Folder containing optimization logs.")
 
-    sim_width = 10000
+    sim_width = 8000
 
 
     args = parser.parse_args()
@@ -568,4 +544,3 @@ if __name__ == "__main__":
         resume_opt(args.save_folder)
     elif args.action == "gen_gds":
         gen_gds(args.save_folder, sim_width=sim_width)
-

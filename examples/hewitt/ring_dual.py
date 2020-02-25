@@ -31,10 +31,6 @@ from spins.invdes.problem_graph import log_tools
 from spins.invdes.problem_graph import optplan
 from spins.invdes.problem_graph import workspace
 
-# If `True`, also minimize the back-reflection.
-MINIMIZE_BACKREFLECTION = False
-
-
 # edit grating.py simulation space
 
 
@@ -79,9 +75,9 @@ def run_opt(save_folder: str, sim_width: float) -> None:
 def create_sim_space(
         gds_fg_name: str,
         gds_bg_name: str,
-        sim_width: float = 10000,  # size of sim_space
-        box_width: float = 6000,  # size of our editing structure
-        wg_width: float = 600,
+        sim_width: float = 8000,  # size of sim_space
+        box_width: float = 4000,  # size of our editing structure
+        wg_width: float = 500,
         buffer_len: float = 1500,  # not sure we'll need
         dx: int = 40,
         num_pmls: int = 10,
@@ -108,57 +104,6 @@ def create_sim_space(
     Returns:
         A `SimulationSpace` description.
     """
-    # Calculate the simulation size, including  PMLs
-    # TODO change the first part of ech dimension to be equal
-    sim_size = [
-        sim_width + 2 * buffer_len + dx * num_pmls,
-        sim_width + 2 * buffer_len + dx * num_pmls
-    ]
-    # First, we use `gdspy` to draw the waveguides and shapes that we would
-    # like to use. Instead of programmatically generating a GDS file using
-    # `gdspy`, we could also simply provide a GDS file (e.g. drawn using
-    # KLayout).
-
-    # Declare some constants to represent the different layers.
-    # Not sure if we need layers
-    LAYER = 100
-
-
-    # Create rectangles corresponding to the waveguide, the BOX layer, and the
-    # design region. We extend the rectangles outside the simulation region
-    # by multiplying locations by a factor of 1.1.
-
-    # We distinguish between the top part of the waveguide (which is etched)
-    # and the bottom part of the waveguide (which is not etched).
-
-    # TODO define our single waveguide and surface, I don't believe it will be etched.
-    # Switch x and y temporarily to try and get better direction for field - change top to bottom
-    # Add an exit
-    waveguide_top = gdspy.Rectangle((-1.1 * sim_size[0] / 2, -box_width/ 2), # edits to the width
-                                (-box_width / 2, box_width / 2),
-                                LAYER)
-
-    waveguide_bottom = gdspy.Rectangle((box_width / 2, -box_width/ 2),
-                                (1.1 * sim_size[0] / 2, box_width / 2),
-                                LAYER)
-
-    design_region = gdspy.Rectangle((-box_width / 2, -box_width / 2),
-                                    (box_width / 2, box_width / 2), # extend region?
-                                    LAYER)
-
-    # Generate the foreground and background GDS files.
-    gds_fg = gdspy.Cell("FOREGROUND", exclude_from_current=True)
-    gds_fg.add(waveguide_top)
-    gds_fg.add(waveguide_bottom)
-    gds_fg.add(design_region)
-
-    # I guess we keep this the same and not include the design_region
-    gds_bg = gdspy.Cell("BACKGROUND", exclude_from_current=True)
-    gds_bg.add(waveguide_top)
-    gds_bg.add(waveguide_bottom)
-
-    gdspy.write_gds(gds_fg_name, [gds_fg], unit=1e-9, precision=1e-9)
-    gdspy.write_gds(gds_bg_name, [gds_bg], unit=1e-9, precision=1e-9)
 
     # The BOX layer/silicon device interface is set at `z = 0`.
     #
@@ -175,7 +120,9 @@ def create_sim_space(
     # Remove the etching stuff
     # Can define Si3N4 - the material we want to use
     # Fix: try to make multiple layers, but all the same?
-    air = optplan.Material(index=optplan.ComplexNumber(real=1))
+
+    #air = optplan.Material(index=optplan.ComplexNumber(real=1))
+    air = optplan.Material(mat_name="air")
     stack = [
         optplan.GdsMaterialStackLayer(
             foreground=air,
@@ -214,7 +161,7 @@ def create_sim_space(
         # in the GDS file outside of the simulation extents will not be drawn.
         sim_region=optplan.Box3d(
             center=[0, 0, 0],
-            extents=[8000, 8000, 40], # this is what's messing things up, needs to be 2D
+            extents=[6000, 6000, 40], # this is what's messing things up, needs to be 2D
         ), # changing the size too much creates an error
         selection_matrix_type="direct_lattice", # or uniform
         # PMLs are applied on x- and z-axes. No PMLs are applied along y-axis
@@ -255,7 +202,7 @@ def create_sim_space(
 GRID_SPACING = 40
 # define these in a more appropriate place
 dx = 40
-wg_width = 600
+wg_width = 500
 
 
 def create_objective(
@@ -269,7 +216,7 @@ def create_objective(
 
     # Create the waveguide source - align with our sim_space
     wg_source = optplan.WaveguideModeSource(
-        center=[-3750, 0, 0],  # may need to edit these, not too sure
+        center=[-2750, -2250, 0],  # may need to edit these, not too sure
         extents=[GRID_SPACING, 5000, 600],  # these too # waveguide overlap should be larger
         normal=[1, 0, 0],
         mode_num=0,
@@ -277,7 +224,7 @@ def create_objective(
     )
 
     wg_out = optplan.WaveguideModeOverlap(
-        center=[3750, 0, 0],
+        center=[2750, -2250, 0],
         extents=[GRID_SPACING, 5000, 600], #edits to the width
         normal=[1, 0, 0],
         mode_num=0,
@@ -285,43 +232,20 @@ def create_objective(
     )
 
     upper = optplan.WaveguideModeOverlap(
-        center=[0, 1000, 0],
-        extents=[GRID_SPACING, 500, 600],
-        normal=[1, 0, 0],
+        center=[0, 0, 0],
+        extents=[500, GRID_SPACING, 600],
+        normal=[0, 1, 0],
         mode_num=0,
         power=1.0,
-    )
+     )
 
-    lower = optplan.WaveguideModeOverlap(
-        center=[0, -1000, 0],
-        extents=[GRID_SPACING, 500, 600],
-        normal=[1, 0, 0],
-        mode_num=0,
-        power=1.0,
-    )
-
-    right = optplan.WaveguideModeOverlap(
-        center=[1250, 0, 0],
-        extents=[GRID_SPACING, 800, 600],
-        normal=[1, 0, 0],
-        mode_num=0,
-        power=1.0,
-    )
-
-    left = optplan.WaveguideModeOverlap(
-        center=[-1250, 0, 0],
-        extents=[GRID_SPACING, 800, 600],
-        normal=[1, 0, 0],
-        mode_num=0,
-        power=1.0,
-    )
 
     # May want to define a way out, not sure
 
     power_objs = []
     # Monitor the metrics and fields
     monitor_list = []
-    for wlen, overlap, label in zip([1070, 1070, 1070, 1070, 1070], [upper, lower, wg_out, right, left], [2, 3, 5, 4, 1]):
+    for wlen, overlap, label in zip([1068, 1068, 660, 660], [upper, wg_out, upper, wg_out], [1, 2, 3, 4]):
         epsilon = optplan.Epsilon(
             simulation_space=sim_space,
             wavelength=wlen,
@@ -456,7 +380,7 @@ def view_opt(save_folder: str) -> None:
     log_df = log_tools.create_log_data_frame(
         log_tools.load_all_logs(save_folder))
     monitor_descriptions = log_tools.load_from_yml(
-        os.path.join(os.path.dirname(__file__), "monitor_spec_wide.yml"))
+        os.path.join(os.path.dirname(__file__), "monitor_spec_dual.yml"))
     log_tools.plot_monitor_data(log_df, monitor_descriptions)
 
 
@@ -554,7 +478,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "save_folder", help="Folder containing optimization logs.")
 
-    sim_width = 10000
+    sim_width = 8000
 
 
     args = parser.parse_args()
@@ -568,4 +492,3 @@ if __name__ == "__main__":
         resume_opt(args.save_folder)
     elif args.action == "gen_gds":
         gen_gds(args.save_folder, sim_width=sim_width)
-
